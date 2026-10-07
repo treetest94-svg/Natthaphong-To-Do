@@ -79,4 +79,6 @@ Public repository: https://github.com/treetest94-svg/Natthaphong-To-Do
 
 Local validation: **14 tests passed, 0 failed** on Node.js 24.19.0. Tests used real HTTP and a real SQLite file. Cross-user update/delete attempts returned 404, blank tasks returned 400, and revoked/expired sessions returned 401. No failing behavior was observed in this run; the input validation and owner restrictions are implemented in the first version.
 
-Live deployment is pending hosted SQLite provisioning. Do not treat the local test result as verification of the public deployment.
+Public deployment: https://natthaphong-to-do.vercel.app/
+
+The Vercel project is connected to Turso hosted SQLite on the free Starter plan. Live end-to-end checks are being completed after database provisioning.
