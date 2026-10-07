@@ -71,6 +71,8 @@ Create users A and B in separate browser profiles. Add a task as A. B's list mus
 
 Vercel's local filesystem is ephemeral. A local SQLite file is suitable for the local demo, but production needs a hosted database. This project supports **Turso hosted SQLite** using `@libsql/client`, preserving the assignment's SQLite requirement. Connect the Turso integration to the Vercel project, or set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` privately through Vercel. Never put actual credentials into this repository. Tables initialize on the first API request. Production deliberately reports an unavailable database rather than falling back to a temporary file.
 
+Source files were committed through the connected GitHub API. The assignment’s `gh` CLI was not available in the execution environment; the resulting repository and commit history are public.
+
 Import this public repository into Vercel. The Express framework preset needs no build command or output directory. Run the tests before publishing. No payment, email, AI or other paid integration is required by the application.
 
 ## Submission and verified checks
@@ -81,4 +83,6 @@ Local validation: **14 tests passed, 0 failed** on Node.js 24.19.0. Tests used r
 
 Public deployment: https://natthaphong-to-do.vercel.app/
 
-The Vercel project is connected to Turso hosted SQLite on the free Starter plan. Live end-to-end checks are being completed after database provisioning.
+The Vercel project is connected to Turso hosted SQLite on the free Starter plan. Live end-to-end checks passed against the public production URL: two users registered and logged in successfully; only user A saw user A’s task; user B’s list was empty; cross-user deletion and completion returned 404; whitespace titles returned 400; owner completion returned 200, deletion returned 204; logout returned 204 and the revoked session subsequently returned 401. These checks used generated test credentials that are not committed or published.
+
+Deployment issue found and fixed: the initial public API returned 503 because the Turso integration was installed without a provisioned database connected to the project. Created a free hosted SQLite database, connected it (which supplied the private environment variables), and deployed again. The public session endpoint then returned the expected 401 for visitors who are not logged in, and registration and login succeeded.
