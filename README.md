@@ -72,3 +72,11 @@ Create users A and B in separate browser profiles. Add a task as A. B's list mus
 Vercel's local filesystem is ephemeral. A local SQLite file is suitable for the local demo, but production needs a hosted database. This project supports **Turso hosted SQLite** using `@libsql/client`, preserving the assignment's SQLite requirement. Connect the Turso integration to the Vercel project, or set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` privately through Vercel. Never put actual credentials into this repository. Tables initialize on the first API request. Production deliberately reports an unavailable database rather than falling back to a temporary file.
 
 Import this public repository into Vercel. The Express framework preset needs no build command or output directory. Run the tests before publishing. No payment, email, AI or other paid integration is required by the application.
+
+## Submission and verified checks
+
+Public repository: https://github.com/treetest94-svg/Natthaphong-To-Do
+
+Local validation: **14 tests passed, 0 failed** on Node.js 24.19.0. Tests used real HTTP and a real SQLite file. Cross-user update/delete attempts returned 404, blank tasks returned 400, and revoked/expired sessions returned 401. No failing behavior was observed in this run; the input validation and owner restrictions are implemented in the first version.
+
+Live deployment is pending hosted SQLite provisioning. Do not treat the local test result as verification of the public deployment.
