@@ -1,0 +1,1 @@
+{"name":"natthaphong-to-do","version":"1.0.0","private":true,"type":"module","engines":{"node":">=24"},"scripts":{"start":"node server.mjs","dev":"node --watch server.mjs","test":"node --test test/*.test.mjs"},"dependencies":{"@libsql/client":"0.18.0","express":"5.2.1"}}

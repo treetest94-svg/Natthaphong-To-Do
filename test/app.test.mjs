@@ -1,0 +1,32 @@
+import {test, before, after} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomBytes} from 'node:crypto';
+import {once} from 'node:events';
+import {database} from '../lib/database.mjs';
+import {createApp} from '../app.js';
+let folder,db,server,base;
+const password=randomBytes(20).toString('hex');
+async function request(path,method='GET',body,cookie){
+ const response=await fetch(base+path,{method,headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},body:body!==undefined?JSON.stringify(body):undefined});
+ return {status:response.status,data:response.status===204?{}:await response.json(),cookie:response.headers.get('set-cookie')?.split(';')[0],headers:response.headers};
+}
+before(async()=>{folder=await mkdtemp(join(tmpdir(),'todo-test-'));db=database('file:'+join(folder,'test.db'));server=createApp(db).listen(0,'127.0.0.1');await once(server,'listening');base=`http://127.0.0.1:${server.address().port}`;});
+after(async()=>{await new Promise(resolve=>server.close(resolve));db.client.close();await rm(folder,{recursive:true,force:true});});
+let a,b,task;
+test('anonymous clients cannot access a task list',async()=>{assert.equal((await request('/api/tasks')).status,401);});
+test('register two independent accounts with HttpOnly session cookies',async()=>{a=await request('/api/register','POST',{username:'alice',password});b=await request('/api/register','POST',{username:'bob',password});assert.equal(a.status,201);assert.equal(b.status,201);assert.match(a.headers.get('set-cookie'),/HttpOnly/);assert.match(a.headers.get('set-cookie'),/SameSite=Lax/);});
+test('passwords and session tokens are not stored in plaintext',async()=>{const users=await db.client.execute('SELECT password_hash FROM users');assert.equal(users.rows.length,2);for(const row of users.rows){assert.match(row.password_hash,/^scrypt\$/);assert.notEqual(row.password_hash,password);}assert.notEqual(users.rows[0].password_hash,users.rows[1].password_hash);const sessions=await db.client.execute('SELECT token_hash FROM sessions');assert.ok(sessions.rows.every(row=>!a.cookie.includes(row.token_hash)));});
+test('duplicate usernames and invalid credentials are rejected',async()=>{assert.equal((await request('/api/register','POST',{username:'ALICE',password})).status,409);assert.equal((await request('/api/register','POST',{username:'x',password:'short'})).status,400);assert.equal((await request('/api/login','POST',{username:'alice',password:'incorrect-password'})).status,401);assert.equal((await request('/api/login','POST',{username:"alice' OR 1=1--",password})).status,401);});
+test('correct password logs in and session resolves current user',async()=>{const login=await request('/api/login','POST',{username:'ALICE',password});assert.equal(login.status,200);assert.equal((await request('/api/me','GET',undefined,login.cookie)).data.user.username,'alice');a=login;});
+test('add a task and return its normalized title',async()=>{const added=await request('/api/tasks','POST',{title:'  Finish assignment  '},a.cookie);assert.equal(added.status,201);task=added.data.task;assert.equal(task.title,'Finish assignment');assert.equal(task.completed,false);});
+test('two users only see their own tasks',async()=>{const alice=await request('/api/tasks','GET',undefined,a.cookie),bob=await request('/api/tasks','GET',undefined,b.cookie);assert.deepEqual(alice.data.tasks.map(row=>row.id),[task.id]);assert.deepEqual(bob.data.tasks,[]);});
+test('another user cannot complete or delete a task by guessing its ID',async()=>{assert.equal((await request(`/api/tasks/${task.id}`,'PATCH',{completed:true},b.cookie)).status,404);assert.equal((await request(`/api/tasks/${task.id}`,'DELETE',{},b.cookie)).status,404);const tasks=await request('/api/tasks','GET',undefined,a.cookie);assert.equal(tasks.data.tasks[0].completed,false);});
+test('blank and oversized titles are rejected, including direct HTTP bypasses',async()=>{for(const title of ['', '   ','x'.repeat(241),null])assert.equal((await request('/api/tasks','POST',{title},a.cookie)).status,400);assert.equal((await request('/api/tasks','GET',undefined,a.cookie)).data.tasks.length,1);});
+test('owner can complete and reopen; malformed states are rejected',async()=>{assert.equal((await request(`/api/tasks/${task.id}`,'PATCH',{completed:'true'},a.cookie)).status,400);assert.equal((await request(`/api/tasks/${task.id}`,'PATCH',{completed:true},a.cookie)).data.task.completed,true);assert.equal((await request(`/api/tasks/${task.id}`,'PATCH',{completed:false},a.cookie)).data.task.completed,false);});
+test('owner can delete; deleting an absent task returns 404',async()=>{assert.equal((await request(`/api/tasks/${task.id}`,'DELETE',{},a.cookie)).status,204);assert.equal((await request(`/api/tasks/${task.id}`,'DELETE',{},a.cookie)).status,404);assert.deepEqual((await request('/api/tasks','GET',undefined,a.cookie)).data.tasks,[]);});
+test('cross-origin task changes are rejected',async()=>{const response=await fetch(base+'/api/tasks',{method:'POST',headers:{'Content-Type':'application/json',Cookie:a.cookie,Origin:'https://untrusted.example'},body:JSON.stringify({title:'Forbidden'})});assert.equal(response.status,403);});
+test('logout revokes the current session',async()=>{assert.equal((await request('/api/logout','POST',{},a.cookie)).status,204);assert.equal((await request('/api/tasks','GET',undefined,a.cookie)).status,401);assert.equal((await request('/api/tasks','GET',undefined,b.cookie)).status,200);});
+test('expired sessions are refused',async()=>{await db.client.execute('UPDATE sessions SET expires_at=0');assert.equal((await request('/api/me','GET',undefined,b.cookie)).status,401);});
